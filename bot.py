@@ -21,76 +21,10 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 load_dotenv()
 
+SUPER_ADMIN = 251756272
+
 API_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = 251756272
-
-ADMINS = [
-    251756272
-]
-
-WORKERS = [
-    111111111,
-    222222222,
-    770001718
-]
-WORKERS_NAMES = [
-    "Автуєвич Володимир",
-    "Бабич Денис",
-    "Богданов Костянтин",
-    "Богуцький Денис",
-    "Болбот Андрій",
-    "Бордюгов Денис",
-    "Гармель Іван",
-    "Гончаренко Артем",
-    "Драчевський Дмитро",
-    "Кваша Олександр",
-    "Ковтун Павло",
-    "Кожедуб Андрій",
-    "Козак Андрій",
-    "Козак Андрій Junior",
-    "Красиков Володимир",
-    "Кулішенко Станіслав",
-    "Куратов Роман",
-    "Макаренко Володимир",
-    "Мірошниченко Максим",
-    "Радченко Іван",
-    "Радченко Сергій",
-    "Рибалко Юрій",
-    "Саушкін Олександр",
-    "Соколюк Євген",
-    "Становий Богдан",
-    "Столярчук Андрій",
-    "Фунтіков Владислав"
-]
-RESPONSIBLES = [
-    "Автуєвич Володимир",
-    "Бабич Денис",
-    "Богданов Костянтин",
-    "Богуцький Денис",
-    "Болбот Андрій",
-    "Бордюгов Денис",
-    "Гармель Іван",
-    "Гончаренко Артем",
-    "Драчевський Дмитро",
-    "Кваша Олександр",
-    "Ковтун Павло",
-    "Кожедуб Андрій",
-    "Козак Андрій",
-    "Козак Андрій Junior",
-    "Красиков Володимир",
-    "Кулішенко Станіслав",
-    "Куратов Роман",
-    "Макаренко Володимир",
-    "Мірошниченко Максим",
-    "Радченко Іван",
-    "Радченко Сергій",
-    "Рибалко Юрій",
-    "Саушкін Олександр",
-    "Соколюк Євген",
-    "Становий Богдан",
-    "Столярчук Андрій",
-    "Фунтіков Владислав"
-]
 
 # ================= INIT =================
 
@@ -125,6 +59,30 @@ CREATE TABLE IF NOT EXISTS periods (
 )
 """)
 
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    telegram_id INTEGER UNIQUE,
+    name TEXT,
+    role TEXT
+)
+""")
+
+conn.commit()
+
+cursor.execute("""
+INSERT OR IGNORE INTO users (
+    telegram_id,
+    name,
+    role
+)
+VALUES (?, ?, ?)
+""", (
+    SUPER_ADMIN,
+    "Владелец",
+    "admin"
+))
+
 conn.commit()
 
 cursor.execute("""
@@ -137,6 +95,19 @@ CREATE TABLE IF NOT EXISTS pinned_message (
 conn.commit()
 
 # ================= HELPERS =================
+
+def get_user_role(user_id):
+
+    user = cursor.execute("""
+    SELECT role
+    FROM users
+    WHERE telegram_id=?
+    """, (user_id,)).fetchone()
+
+    if not user:
+        return None
+
+    return user[0]
 
 async def update_pinned_message():
 
@@ -221,20 +192,24 @@ class AddTaskState(StatesGroup):
 class EditTaskState(StatesGroup):
     waiting_for_new_text = State()
 
+class AddUserState(StatesGroup):
+
+    waiting_for_id = State()
+
+def is_allowed(user_id):
+
+    role = get_user_role(user_id)
+
+    return role in ["admin", "worker"]
+
 def is_admin(user_id):
-    return user_id in ADMINS
+
+    return get_user_role(user_id) == "admin"
 
 
 def is_worker(user_id):
-    return user_id in WORKERS
 
-
-def is_allowed(user_id):
-    return (
-        is_admin(user_id)
-        or is_worker(user_id)
-    )
-
+    return get_user_role(user_id) == "worker"
 
 def get_active_period():
     return cursor.execute(
@@ -280,10 +255,17 @@ def responsible_keyboard():
         resize_keyboard=True
     )
 
-    for worker in WORKERS_NAMES:
+    workers = cursor.execute("""
+    SELECT name
+    FROM users
+    WHERE role='worker'
+    ORDER BY name
+    """).fetchall()
+
+    for worker in workers:
 
         keyboard.add(
-            KeyboardButton(f"👤 {worker}")
+            KeyboardButton(f"👤 {worker[0]}")
         )
 
     keyboard.add(
@@ -332,14 +314,13 @@ def main_menu(user_id):
         resize_keyboard=True
     )
 
-    keyboard.add(
-        KeyboardButton("📋 Список задач")
-    )
+    role = get_user_role(user_id)
 
-    if is_admin(user_id):
+    if role == "admin":
 
         keyboard.add(
-            KeyboardButton("➕ Добавить задачу")
+            KeyboardButton("➕ Добавить задачу"),
+            KeyboardButton("📋 Список задач")
         )
 
         keyboard.add(
@@ -348,10 +329,41 @@ def main_menu(user_id):
         )
 
         keyboard.add(
-            KeyboardButton("📊 Статистика"),
             KeyboardButton("📁 Архив"),
             KeyboardButton("📤 Excel отчет")
         )
+
+        keyboard.add(
+            KeyboardButton("👥 Персонал")
+        )
+
+    elif role == "worker":
+
+        keyboard.add(
+            KeyboardButton("📋 Список задач")
+        )
+
+    return keyboard
+
+def personnel_menu():
+
+    keyboard = ReplyKeyboardMarkup(
+        resize_keyboard=True
+    )
+
+    keyboard.add(
+        KeyboardButton("➕ Добавить админа"),
+        KeyboardButton("➕ Добавить работника")
+    )
+
+    keyboard.add(
+        KeyboardButton("📋 Список персонала"),
+        KeyboardButton("🗑 Удалить пользователя")
+    )
+
+    keyboard.add(
+        KeyboardButton("⬅️ Назад")
+    )
 
     return keyboard
 
@@ -592,6 +604,86 @@ async def list_tasks(message: types.Message):
 
 # ================= BUTTON MENU =================
 
+@dp.message_handler(
+    lambda message: message.text == "👥 Персонал"
+)
+async def open_personnel_menu(
+    message: types.Message
+):
+
+    if not is_admin(message.from_user.id):
+        return
+
+    await message.reply(
+        "👥 Управление персоналом",
+        reply_markup=personnel_menu()
+    )
+
+@dp.message_handler(
+    lambda message: message.text == "➕ Добавить работника"
+)
+async def add_worker_start(
+    message: types.Message
+):
+
+    if not is_admin(message.from_user.id):
+        return
+
+    await AddUserState.waiting_for_id.set()
+
+    await message.reply(
+        "Отправь:\n\n"
+        "ID | Имя\n\n"
+        "Пример:\n"
+        "123456789 | Иван"
+    )
+
+@dp.message_handler(
+    state=AddUserState.waiting_for_id
+)
+async def save_worker(
+    message: types.Message,
+    state: FSMContext
+):
+
+    try:
+
+        parts = message.text.split("|")
+
+        telegram_id = int(parts[0].strip())
+        name = parts[1].strip()
+
+        cursor.execute("""
+        INSERT OR REPLACE INTO users (
+            telegram_id,
+            name,
+            role
+        )
+        VALUES (?, ?, ?)
+        """, (
+            telegram_id,
+            name,
+            "worker"
+        ))
+
+        conn.commit()
+
+        await state.finish()
+
+        await message.reply(
+            f"✅ Работник {name} добавлен",
+            reply_markup=personnel_menu()
+        )
+
+    except Exception as e:
+
+        print(e)
+
+        await message.reply(
+            "❌ Формат:\n"
+            "123456789 | Иван"
+        )
+
 @dp.message_handler(lambda message: message.text == "📋 Список задач")
 async def button_list(message: types.Message):
     await list_tasks(message)
@@ -649,7 +741,7 @@ async def statistics(message: types.Message):
 @dp.message_handler(lambda message: message.text == "➕ Добавить задачу")
 async def add_task_start(message: types.Message):
 
-    if not is_allowed(message.from_user.id):
+    if not is_admin(message.from_user.id):
         await message.reply("❌ Нет доступа")
         return
 
@@ -694,7 +786,14 @@ async def add_task_responsible(
         .strip()
     )
 
-    if responsible not in RESPONSIBLES:
+    worker = cursor.execute("""
+    SELECT *
+    FROM users
+    WHERE role='worker'
+    AND name=?
+    """, (responsible,)).fetchone()
+
+    if not worker:
 
         await message.reply(
             "❌ Выберите сотрудника кнопкой"
@@ -978,15 +1077,20 @@ async def edit_responsible_start(
     )
 
 
-@dp.message_handler(lambda message:
-    message.text.startswith("👤 ")
+@dp.message_handler(
+    lambda message: message.text.startswith("👤 "),
+    state="*"
 )
+
 async def save_new_responsible(
     message: types.Message,
     state: FSMContext
 ):
 
     data = await state.get_data()
+
+    if "edit_resp_task_id" not in data:
+        return
 
     if "edit_resp_task_id" not in data:
         return
@@ -1234,8 +1338,14 @@ async def get_id(message: types.Message):
 @dp.message_handler(commands=['start'])
 async def start(message: types.Message):
 
-    if not is_allowed(message.from_user.id):
-        await message.reply("❌ Нет доступа")
+    role = get_user_role(message.from_user.id)
+
+    if not role:
+
+        await message.reply(
+            "⛔ У вас нет доступа"
+        )
+
         return
 
     await message.reply(
