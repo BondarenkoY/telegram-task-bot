@@ -196,6 +196,10 @@ class AddUserState(StatesGroup):
 
     waiting_for_id = State()
 
+class DeleteUserState(StatesGroup):
+
+    waiting_for_user_id = State()
+
 def is_allowed(user_id):
 
     role = get_user_role(user_id)
@@ -753,6 +757,78 @@ async def add_admin_start(
         "Пример:\n"
         "123456789 | Иван"
     )
+
+@dp.message_handler(
+    lambda message: message.text == "🗑 Удалить пользователя"
+)
+async def delete_user_start(
+    message: types.Message
+):
+
+    if not is_admin(message.from_user.id):
+        return
+
+    await DeleteUserState.waiting_for_user_id.set()
+
+    await message.reply(
+        "Введите Telegram ID пользователя"
+    )
+
+@dp.message_handler(
+    state=DeleteUserState.waiting_for_user_id
+)
+async def delete_user(
+    message: types.Message,
+    state: FSMContext
+):
+
+    try:
+
+        telegram_id = int(message.text)
+
+        if telegram_id == SUPER_ADMIN:
+
+            await message.reply(
+                "❌ Нельзя удалить SUPER_ADMIN"
+            )
+
+            return
+
+        user = cursor.execute("""
+        SELECT *
+        FROM users
+        WHERE telegram_id=?
+        """, (telegram_id,)).fetchone()
+
+        if not user:
+
+            await message.reply(
+                "❌ Пользователь не найден"
+            )
+
+            return
+
+        cursor.execute("""
+        DELETE FROM users
+        WHERE telegram_id=?
+        """, (telegram_id,))
+
+        conn.commit()
+
+        await state.finish()
+
+        await message.reply(
+            "🗑 Пользователь удален",
+            reply_markup=personnel_menu()
+        )
+
+    except Exception as e:
+
+        print(e)
+
+        await message.reply(
+            "❌ Введите корректный ID"
+        )
 
 @dp.message_handler(lambda message: message.text == "📋 Список задач")
 async def button_list(message: types.Message):
