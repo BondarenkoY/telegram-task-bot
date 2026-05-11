@@ -21,7 +21,9 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 load_dotenv()
 
-API_TOKEN = os.getenv("BOT_TOKEN")
+API_TOKEN = os.environ["BOT_TOKEN"]
+
+print("TOKEN LOADED")
 CHAT_ID = 251756272
 
 ADMINS = [
