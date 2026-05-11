@@ -660,7 +660,7 @@ async def save_worker(
         role = data.get("role", "worker")
 
         cursor.execute("""
-        INSERT OR REPLACE INTO users (
+        INSERT INTO users (
             telegram_id,
             name,
             role
@@ -679,6 +679,12 @@ async def save_worker(
         await message.reply(
             f"✅ {role} {name} добавлен",
             reply_markup=personnel_menu()
+        )
+
+    except sqlite3.IntegrityError:
+
+        await message.reply(
+            "❌ Пользователь с таким ID уже существует"
         )
 
     except Exception as e:
