@@ -921,6 +921,16 @@ async def add_task_responsible(
     message: types.Message,
     state: FSMContext
 ):
+    if message.text == "⬅️ Назад":
+
+        await state.finish()
+
+        await message.reply(
+            "↩️ Возврат в меню",
+            reply_markup=main_menu(message.from_user.id)
+        )
+
+        return
 
     data = await state.get_data()
 
