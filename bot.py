@@ -726,6 +726,28 @@ async def personnel_list(
 
     await message.reply(text)
 
+@dp.message_handler(
+    lambda message: message.text == "➕ Добавить админа"
+)
+async def add_admin_start(
+    message: types.Message,
+    state: FSMContext
+):
+
+    if not is_admin(message.from_user.id):
+        return
+
+    await state.update_data(role="admin")
+
+    await AddUserState.waiting_for_id.set()
+
+    await message.reply(
+        "Отправь:\n\n"
+        "ID | Имя\n\n"
+        "Пример:\n"
+        "123456789 | Иван"
+    )
+
 @dp.message_handler(lambda message: message.text == "📋 Список задач")
 async def button_list(message: types.Message):
     await list_tasks(message)
