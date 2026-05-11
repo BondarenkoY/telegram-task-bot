@@ -1398,7 +1398,10 @@ async def export_excel(
 
 # ================= START =================
 
-@dp.message_handler(lambda message: message.text == "⬅️ Назад", state="*")
+@dp.message_handler(
+    lambda message: message.text == "⬅️ Назад",
+    state="*"
+)
 async def back_to_menu(
     message: types.Message,
     state: FSMContext
