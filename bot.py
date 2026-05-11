@@ -623,12 +623,14 @@ async def open_personnel_menu(
     lambda message: message.text == "➕ Добавить работника"
 )
 async def add_worker_start(
-    message: types.Message
+    message: types.Message,
+    state: FSMContext
 ):
 
     if not is_admin(message.from_user.id):
         return
 
+    await state.update_data(role="worker")
     await AddUserState.waiting_for_id.set()
 
     await message.reply(
@@ -653,6 +655,10 @@ async def save_worker(
         telegram_id = int(parts[0].strip())
         name = parts[1].strip()
 
+        data = await state.get_data()
+
+        role = data.get("role", "worker")
+
         cursor.execute("""
         INSERT OR REPLACE INTO users (
             telegram_id,
@@ -663,7 +669,7 @@ async def save_worker(
         """, (
             telegram_id,
             name,
-            "worker"
+            role
         ))
 
         conn.commit()
@@ -671,7 +677,7 @@ async def save_worker(
         await state.finish()
 
         await message.reply(
-            f"✅ Работник {name} добавлен",
+            f"✅ {role} {name} добавлен",
             reply_markup=personnel_menu()
         )
 
@@ -683,6 +689,42 @@ async def save_worker(
             "❌ Формат:\n"
             "123456789 | Иван"
         )
+
+@dp.message_handler(
+    lambda message: message.text == "📋 Список персонала"
+)
+async def personnel_list(
+    message: types.Message
+):
+
+    if not is_admin(message.from_user.id):
+        return
+
+    rows = cursor.execute("""
+    SELECT *
+    FROM users
+    ORDER BY role, name
+    """).fetchall()
+
+    if not rows:
+
+        await message.reply(
+            "📭 Персонал пуст"
+        )
+
+        return
+
+    text = "👥 Персонал\n\n"
+
+    for user in rows:
+
+        text += (
+            f"👤 {user[2]}\n"
+            f"🆔 {user[1]}\n"
+            f"🔑 {user[3]}\n\n"
+        )
+
+    await message.reply(text)
 
 @dp.message_handler(lambda message: message.text == "📋 Список задач")
 async def button_list(message: types.Message):
